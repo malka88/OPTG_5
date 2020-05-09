@@ -32,6 +32,10 @@ var g = new THREE.Vector3(0, -9.8, 0);
 var particles = [];
 var MAX_PARTICLES = 1000;
 var PARTICLES_PER_SECOND = 100;
+var partVis = false;
+
+var uWind = 0;
+var wind = new THREE.Vector3(0.0, 0.0, 0.0);
 
 var rainMat = null;
 
@@ -457,23 +461,18 @@ function GUI()
 {
     var params =
     {
-        sx: 0, sy: 0, sz: 0,
+        wind: 0,
         brush: false,
+        rain: false,
         addBush: function() { addMesh('bush') },
         addHouse: function() { addMesh('house') }
         //del: function() { delMesh() }
     };
-    var folder1 = gui.addFolder('Scale');
-    var meshSX = folder1.add( params, 'sx' ).min(1).max(100).step(1).listen();
-    var meshSY = folder1.add( params, 'sy' ).min(1).max(100).step(1).listen();
-    var meshSZ = folder1.add( params, 'sz' ).min(1).max(100).step(1).listen();
-    folder1.open();
-    meshSX.onChange(function(value) {
-        if (selected != null)
-        {
-            selected.userData.cube.rotation.set(0, value * 0.01, 0);
-            selected.rotation.set(0, value * 0.01, 0);
-        }
+
+    var meshWIND = gui.add( params, 'wind' ).min(-100).max(100).step(1).listen();
+    meshWIND.onChange(function(value) {
+        xwind = value;
+        wind.set(xwind, 0, 0);
     });
     var cubeVisible = gui.add( params, 'brush' ).name('brush').listen();
     cubeVisible.onChange(function(value)
@@ -481,6 +480,11 @@ function GUI()
         brVis = value;
         cursor3D.visible = value;
         circle.visible = value;
+    });
+    var particlesVisible = gui.add( params, 'rain' ).name('rain').listen();
+    particlesVisible.onChange(function(value)
+    {
+        partVis = value;
     });
     gui.add( params, 'addHouse' ).name( "add house" );
     gui.add( params, 'addBush' ).name( "add bush" );
@@ -724,6 +728,8 @@ function hitButton(mPos, sprite)
         {
             sprite.sprite.material = sprite.mat2;
         }
+        else
+            sprite.sprite.material = sprite.mat1;
     }
     else sprite.sprite.material = sprite.mat1;
 }
@@ -814,5 +820,24 @@ function emitter(delta)
 
         particles[i].v.add(gs);
         particles[i].sprite.position.add(particles[i].v);
+    }
+
+    for (var i = 0; i < particles.length; i++)
+    {
+        if (partVis == true)
+            particles[i].sprite.visible = true;
+        else
+            particles[i].sprite.visible = false;
+
+        var v = new THREE.Vector3(0, 0, 0);
+        var w = new THREE.Vector3(0, 0, 0);
+        
+        w.copy(wind);
+        w.multiplyScalar(delta);
+        
+        v.copy(particles[i].v);
+        v.add(w);
+        
+        particles[i].sprite.position.add(v);
     }
 }
