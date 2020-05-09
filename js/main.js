@@ -1,4 +1,5 @@
-var camera, scene, renderer, cameraOrtho;
+var camera, scene, renderer, cameraOrtho, sceneOrtho;
+var loader = new THREE.TextureLoader();
 var container;
 var geometry;
 
@@ -25,6 +26,15 @@ var models = new Map();
 
 var selected = null;
 
+var sprt;
+
+var g = new THREE.Vector3(0, -9.8, 0);
+var particles = [];
+var MAX_PARTICLES = 1000;
+var PARTICLES_PER_SECOND = 100;
+
+var rainMat = null;
+
 init();
 animate();
 
@@ -33,6 +43,11 @@ function init()
 {
     container = document.getElementById( 'container' );
     scene = new THREE.Scene();
+    sceneOrtho = new THREE.Scene();
+
+    var width = window.innerWidth;
+	var height = window.innerHeight;
+    
 
     cameraOrtho = new THREE.OrthographicCamera( - width / 2, width / 2, height / 2, - height / 2, 1, 10 );
     cameraOrtho.position.z = 10;
@@ -54,6 +69,8 @@ function init()
 
     container.appendChild( renderer.domElement );
     window.addEventListener( 'resize', onWindowResize, false );
+
+    renderer.autoClear = false;
 
     renderer.domElement.addEventListener('mousedown',onDocumentMouseDown,false);
     renderer.domElement.addEventListener('mouseup',onDocumentMouseUp,false);
@@ -85,8 +102,17 @@ function init()
     GUI();
     loadModel('models/', 'Cyprys_House.obj', 'Cyprys_House.mtl', 1, 'house');
     loadModel('models/', 'Bush1.obj', 'Bush1.mtl', 1, 'bush');
+    
+    // addSprite('models/l68717-cyprys-house-23761.jpg', sprt);
 
-    var sprt = addSprite('models/l68717-cyprys-house-23761.jpg');
+    addButtons();
+
+   /* for(var i = 0; i < 10; i++)
+    {
+        var pos = new THREE.Vector4(i*5, 20, n/2);
+        addSprite('pics/b084afa2b8c082060b58360e309c11a5.jpg', pos);
+    } */
+    rainMat = createSpriteMaterial('pics/b084afa2b8c082060b58360e309c11a5.jpg');
 }
 
 function terrainGen()
@@ -117,7 +143,7 @@ function terrainGen()
     geometry.computeFaceNormals();
     geometry.computeVertexNormals();
 
-    var loader = new THREE.TextureLoader();
+    
     var tex = loader.load( 'pics/grasstile.jpg');
 
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping; 
@@ -168,6 +194,8 @@ function animate()
     {
         sculpt(brushDirection, delta);
     }
+
+    emitter(delta);
 
     requestAnimationFrame( animate );
     render();
@@ -275,6 +303,14 @@ function onDocumentMouseScroll( event )
 
 function onDocumentMouseMove( event )
 {
+    var mpos = {};
+
+    mpos.x = event.clientX - (window.innerWidth / 2);
+    mpos.y = (window.innerHeight / 2) - event.clientY;
+
+    if(sprt != null)
+        hitButton(mpos, sprt);
+
     mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
     mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
     var vector = new THREE.Vector3( mouse.x, mouse.y, 1 );
@@ -380,6 +416,14 @@ function onDocumentMouseUp( event )
         brushDirection = 0;
     else
     {
+        var mpos = {};
+
+        mpos.x = event.clientX - (window.innerWidth / 2);
+        mpos.y = (window.innerHeight / 2) - event.clientY;
+
+        if(sprt != null){
+            clickButton(mpos, sprt);}
+
         selected.userData.cube.material.visible = false;
         selected = null;
     }
@@ -630,16 +674,145 @@ function intersect(ob1, ob2)
     return true;
 }
 
-function addSprite(texture)
+function addButton(name1, name2)
 {
+    var texture1 = loader.load(name1);
+    var material1 = new THREE.SpriteMaterial( { map: texture1 } );
+
+    var texture2 = loader.load(name2);
+    var material2 = new THREE.SpriteMaterial( { map: texture2 } );
+
+        sprite = new THREE.Sprite( material1 );
+        sprite.center.set( 0.0, 1.0 );
+        sprite.scale.set( 80, 64, 1 );
+
+        sceneOrtho.add(sprite);
+        updateHUDSprites(sprite);
+
+        var SSprite = {};
+        SSprite.sprite = sprite;
+        SSprite.mat1 = material1;
+        SSprite.mat2 = material2;
+        SSprite.click = sprtClick;
+
+        return SSprite;
+}
+
+function updateHUDSprites(sprite) {
+
+    var width = window.innerWidth / 2;
+    var height = window.innerHeight / 2;
+
+    sprite.position.set( -width, height, 1 ); // center
+
+}
+function addButtons()
+{
+    sprt = addButton('models/l68717-cyprys-house-23761.jpg', 'models/l68717-cyprys-house-23761.jpg');
+}
+
+function hitButton(mPos, sprite)
+{
+    var pw = sprite.sprite.position.x;
+    var ph = sprite.sprite.position.y;
+    var sw = pw + sprite.sprite.scale.x;
+    var sh = ph - sprite.sprite.scale.y;
+
+    if(mPos.x > pw && mPos.x < sw)
+    {
+        if(mPos.y < ph && mPos.y > sh)
+        {
+            sprite.sprite.material = sprite.mat2;
+        }
+    }
+    else sprite.sprite.material = sprite.mat1;
+}
+
+function clickButton(mPos, sprite)
+{
+    var pw = sprite.sprite.position.x;
+    var ph = sprite.sprite.position.y;
+    var sw = pw + sprite.sprite.scale.x;
+    var sh = ph - sprite.sprite.scale.y;
+
+    if(mPos.x > pw && mPos.x < sw)
+    {
+        if(mPos.y < ph && mPos.y > sh)
+        {
+            sprite.click();
+        }
+    }
+}
+
+function sprtClick()
+{
+    addMesh('house');
+}
+
+function createSpriteMaterial(name)
+{
+    var texture = loader.load(name);
     var material = new THREE.SpriteMaterial( { map: texture } );
 
-	var width = material.map.image.width;
-	var height = material.map.image.height;
+    return material;
+}
 
-	var sprite = new THREE.Sprite( material );
-	sprite.center.set( 0.0, 1.0 );
-	sprite.scale.set( width, height, 1 );
-	
-    return sprite;
+function addSprite(mat, pos, lifetime)
+{
+    
+
+    sprite = new THREE.Sprite( mat );
+    sprite.center.set( 0.5, 0.5 );
+    sprite.scale.set( 1.5, 1.5, 1 );
+
+    sprite.position.copy(pos);
+
+    scene.add(sprite);
+
+    var SSprite = {};
+    SSprite.sprite = sprite;
+    SSprite.v = new THREE.Vector3(0, 0, 0);
+    SSprite.m = (Math.random() * 0.1) + 0.01;
+    SSprite.lifetime = lifetime;
+
+    return SSprite;
+}
+
+function emitter(delta)
+{
+    var current_particles = Math.ceil(PARTICLES_PER_SECOND * delta);
+
+    for(var i = 0; i < current_particles; i++)
+    {
+        if(particles.length < MAX_PARTICLES)
+        {
+            var x = Math.random()*n;
+            var z = Math.random()*n;
+
+            var lifetime = (Math.random()*2) + 3;
+
+            var pos = new THREE.Vector4(x, 150, z);
+            var particle = addSprite(rainMat, pos, lifetime);
+            particles.push(particle);
+        }
+    }
+
+    for(var i = 0; i < particles.length; i++)
+    {
+        particles[i].lifetime -= delta;
+        if(particles[i].lifetime <= 0)
+        {
+            scene.remove(particles[i].sprite);
+            particles.splice(i, 1);
+            continue;
+        }
+        var gs = new THREE.Vector3();
+        gs.copy(g);
+
+        gs.multiplyScalar(particles[i].m);
+        gs.multiplyScalar(delta);
+
+        particles[i].v.add(gs);
+        particles[i].sprite.position.add(particles[i].v);
+    }
 }
