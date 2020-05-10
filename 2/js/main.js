@@ -1,6 +1,8 @@
 var camera;
 
 var planets = []; 
+var planetsName = [];
+var planetsInfo = [];
 var moon;
 var loader = new THREE.TextureLoader();
 var clock = new THREE.Clock();
