@@ -1,843 +1,480 @@
-var camera, scene, renderer, cameraOrtho, sceneOrtho;
+var camera, cameraOrtho, sceneOrtho;
+
+var planets = []; 
+var planetName = [];
+var planetInfo = [];
+var moon;
 var loader = new THREE.TextureLoader();
-var container;
-var geometry;
-
 var clock = new THREE.Clock();
+var earthCloud = createEarthCloud();
+var al =  0.0;
+var bl = al;
+var keyboard = new THREEx.KeyboardState();
+var keys = [false, false, false, false]
 
-//var keyboard = new THREEx.KeyboardState();
 
-var n = 100;
-var cursor3D, circle;
-var radius = 10;
+function crPlanet(texPath, bumpPath, size, x, v1)
+{
+    var geometry = new THREE.SphereGeometry( size, 32, 32 );
+    var tex = loader.load( texPath );
+    var bump = loader.load( bumpPath);
+    tex.minFilter = THREE.NearestFilter;
+    var material = new THREE.MeshPhongMaterial({
+        map: tex,
+        bumpMap: bump,
+        bumpScale: 0.05,
+        side: THREE.DoubleSide
+    });
+    //создание объекта
+    var sphere = new THREE.Mesh( geometry, material );
+    sphere.position.set(x, 0, 0);
+    //размещение объекта в сцене
+    scene.add( sphere );
 
-var brushDirection = 0;
+    var planet = {}; //создание
+    planet.planet = sphere; //добавление поля planet
+    planet.x = x;
+    planet.v1 = v1;
+    planet.a1 = 0.0;
+    planet.r = size;
 
-var mouse = { x: 0, y: 0 }; 
-var targetList = [];
-var objectsList = [];
+    planets.push(planet)
+}
 
-var gui = new dat.GUI();
-gui.width = 200;
+function crStars(texPath, size)
+{
+    //создание геометрии сферы
+    var geometry = new THREE.SphereGeometry( size, 32, 32 );
+    //загрузка текстуры
+    var tex = loader.load(texPath);
+    tex.minFilter = THREE.NearestFilter;
+    //создание материала
+    var material = new THREE.MeshBasicMaterial({
+        map: tex,
+        side: THREE.DoubleSide
+    });
+    //создание объекта
+    var sphere = new THREE.Mesh( geometry, material );
+    sphere.position.set(0, 0, 0);
+    //размещение объекта в сцене
+    scene.add( sphere );
+}
 
-var brVis = false;
+function crMoon(texPath, bumpPath, size, v1)
+{
+    var geometry = new THREE.SphereGeometry( size, 32, 32 );
+    //загрузка текстуры
+    var tex = loader.load(texPath);
+    var bump = loader.load( bumpPath);
+    tex.minFilter = THREE.NearestFilter;
+    //создание материала
+    var material = new THREE.MeshBasicMaterial({
+        map: tex,
+        bumpMap: bump,
+        bumpScale: 0.05,
+        side: THREE.DoubleSide
+    });
+    //создание объекта
+    var sphere = new THREE.Mesh( geometry, material );
+    sphere.position.set(6, 0, 0);
+    //размещение объекта в сцене
+    scene.add( sphere );
 
-var models = new Map();
+    var planet = {}; //создание
+    planet.planet = sphere; //добавление поля planet
+    planet.r = 6;
+    planet.v1 = v1;
+    planet.a1 = 0.0;
 
-var selected = null;
-
-var sprt;
-
-var g = new THREE.Vector3(0, -9.8, 0);
-var particles = [];
-var MAX_PARTICLES = 1000;
-var PARTICLES_PER_SECOND = 100;
-var partVis = false;
-
-var uWind = 0;
-var wind = new THREE.Vector3(0.0, 0.0, 0.0);
-
-var rainMat = null;
-
-init();
-animate();
-
+    moon = planet;
+}
 
 function init()
 {
     container = document.getElementById( 'container' );
     scene = new THREE.Scene();
-    sceneOrtho = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 4000 );
+    
+
+    camera.position.set(80, 30, 15);
+    camera.lookAt(new THREE.Vector3( 0, 0.0, 0));
 
     var width = window.innerWidth;
-	var height = window.innerHeight;
-    
+    var height = window.innerHeight;
 
-    cameraOrtho = new THREE.OrthographicCamera( - width / 2, width / 2, height / 2, - height / 2, 1, 10 );
+    cameraOrtho = new THREE.OrthographicCamera( - width / 2, width / 2, height / 2, -height / 2, 1, 10 );
     cameraOrtho.position.z = 10;
-
-    camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 40000 );
     
-
-    camera.position.set(n/2, n/2, n*1.5);
-
-    camera.lookAt(new THREE.Vector3( n/2, 0.0, n/2));
+    sceneOrtho = new THREE.Scene();
 
 
     renderer = new THREE.WebGLRenderer( { antialias: false } );
     renderer.setSize( window.innerWidth, window.innerHeight );
-    renderer.setClearColor(  0x444444, 1);
-
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFShadowMap;
-
+    renderer.setClearColor(  0x000000ff, 1);
     container.appendChild( renderer.domElement );
     window.addEventListener( 'resize', onWindowResize, false );
 
     renderer.autoClear = false;
 
-    renderer.domElement.addEventListener('mousedown',onDocumentMouseDown,false);
-    renderer.domElement.addEventListener('mouseup',onDocumentMouseUp,false);
-    renderer.domElement.addEventListener('mousemove',onDocumentMouseMove,false);
-    renderer.domElement.addEventListener('wheel',onDocumentMouseScroll,false);
-    renderer.domElement.addEventListener("contextmenu",
-                                        function (event)
-                                        {
-                                        event.preventDefault();
-                                        });
+    var light = new THREE.PointLight( 0xffffff );
+    light.position.set( 0, 0, 0 );
+    scene.add( light );
 
-    var light = new THREE.DirectionalLight( 0xffffff );
-    light.position.set(n, n, n/2);
+    var light = new THREE.AmbientLight( 0x202020 ); // soft white light
+    scene.add( light );
 
-    light.target = new THREE.Object3D();
-    light.target.position.set(n/2, 0, n/2);
-    scene.add(light.target);
-    light.castShadow = true;
-    light.shadow = new THREE.LightShadow(new THREE.PerspectiveCamera(60, 1, 10, 1000));
-    light.shadow.bias = 0.0001;
-    light.shadow.mapSize.width = 4096;
-    light.shadow.mapSize.height = 4096;
-    scene.add(light);
+    crStars("Planets/sunmap.jpg", 10);
+    crStars("Planets/starmap.jpg", 500);
 
-    var helper = new THREE.CameraHelper(light.shadow.camera);
-    add3DCursor();
-    addCircle();
-    terrainGen();
-    GUI();
-    loadModel('models/', 'Cyprys_House.obj', 'Cyprys_House.mtl', 1, 'house');
-    loadModel('models/', 'Bush1.obj', 'Bush1.mtl', 1, 'bush');
-    
-    // addSprite('models/l68717-cyprys-house-23761.jpg', sprt);
+    crPlanet( "Planets/mercurymap.jpg", "Planets/mercury/mercurybump.jpg", 2, 20, 2);
+    crPlanet( "Planets/venusmap.jpg", "Planets/venus/venusbump.jpg", 3, 30, 1.5);
+    crPlanet( "Planets/earthmap1k.jpg", "Planets/earth/earthbump1k.jpg", 4, 40, 1.1);
+    crPlanet( "Planets/marsmap1k.jpg", "Planets/mars/marsbump1k.jpg", 3.5, 55, 1.3);
+    crMoon( "Planets/earth/moon/moonmap1k.jpg", "Planets/earth/moon/moonbump1k.jpg", 1.5, 1.2 )
 
-    addButtons();
+    crSpriteName( 'Planets/Sprites/Mercury.png' );
+    crSpriteName( 'Planets/Sprites/Venus.png' );
+    crSpriteName( 'Planets/Sprites/Earth.png' );
+    crSpriteName( 'Planets/Sprites/Mars.png' );
 
-   /* for(var i = 0; i < 10; i++)
-    {
-        var pos = new THREE.Vector4(i*5, 20, n/2);
-        addSprite('pics/b084afa2b8c082060b58360e309c11a5.jpg', pos);
-    } */
-    rainMat = createSpriteMaterial('pics/b084afa2b8c082060b58360e309c11a5.jpg');
-}
+    crSpriteInfo( 'Planets/Sprites/Mercury_.png' );
+    crSpriteInfo( 'Planets/Sprites/Venus_.png' );
+    crSpriteInfo( 'Planets/Sprites/Earth_.png' );
+    crSpriteInfo( 'Planets/Sprites/Mars_.png' );
 
-function terrainGen()
-{
-    geometry = new THREE.Geometry();
-
-    for(var i = 0; i < n; i++)
-    for(var j = 0; j < n; j++)
-    {
-        geometry.vertices.push(new THREE.Vector3(i, 0.0, j));
-    }
-
-    for(var i = 0; i < (n-1); i++)
-        for(var j = 0; j < (n-1); j++)
-        {
-            geometry.faces.push(new THREE.Face3(i+j*n, (i+1)+j*n, (i+1)+(j+1)*n));
-            geometry.faces.push(new THREE.Face3(i+j*n, (i+1)+(j+1)*n, (i)+(j+1)*n));
-                
-            geometry.faceVertexUvs[0].push([new THREE.Vector2((i)/(n-1), (j)/(n-1)),
-                new THREE.Vector2((i+1)/(n-1), (j)/(n-1)),
-                new THREE.Vector2((i+1)/(n-1), (j+1)/(n-1))]);
-
-            geometry.faceVertexUvs[0].push([new THREE.Vector2((i)/(n-1), (j)/(n-1)),
-                new THREE.Vector2((i+1)/(n-1), (j+1)/(n-1)),
-                new THREE.Vector2((i)/(n-1), (j+1)/(n-1))]);
-        }
-
-    geometry.computeFaceNormals();
-    geometry.computeVertexNormals();
-
-    
-    var tex = loader.load( 'pics/grasstile.jpg');
-
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping; 
-    tex.repeat.set( 4, 4 );
-
-    var mat = new THREE.MeshLambertMaterial({
-        map:tex,
-        wireframe: false,
-        side:THREE.DoubleSide
-    });
-
-    var mesh = new THREE.Mesh(geometry, mat);
-    mesh.position.set(0.0, 0.0, 0.0);
-    mesh.receiveShadow = true;
-    targetList.push(mesh);
-    scene.add(mesh);
+    scene.add(earthCloud);
+    //console.log(earthCloud);
+   
+    line();
 }
 
 function onWindowResize()
 {
-    var width = window.innerWidth;
-    var height = window.innerHeight;
-    
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
-
-    cameraOrtho.left = - width / 2;
-	cameraOrtho.right = width / 2;
-	cameraOrtho.top = height / 2;
-	cameraOrtho.bottom = - height / 2;
-	cameraOrtho.updateProjectionMatrix();
     renderer.setSize( window.innerWidth, window.innerHeight );
 }
 
 function render() 
 {
     renderer.clear();
-	renderer.render( scene, camera );
-	renderer.clearDepth();
-	renderer.render( sceneOrtho, cameraOrtho );
+    renderer.render( scene, camera );
+    renderer.clearDepth();
+    renderer.render( sceneOrtho, cameraOrtho );
 }
 
-function animate() 
+function animate()
 {
+
     var delta = clock.getDelta();
 
-    if (brushDirection != 0)
+    for(var i = 0; i < planets.length; i++)
     {
-        sculpt(brushDirection, delta);
+
+        var m = new THREE.Matrix4();
+        var m1 = new THREE.Matrix4();
+        var m2 = new THREE.Matrix4();
+        var ms = new THREE.Matrix4();
+        var m1s = new THREE.Matrix4();
+        var m2s = new THREE.Matrix4();
+        planets[i].a1 += planets[i].v1 * delta;
+
+        //создание матрицы поворота (вокруг оси Y) в m1 и матрицы перемещения в m2
+        m1.makeRotationY( planets[i].a1 );
+        m2.setPosition(new THREE.Vector3(planets[i].x, 0, 0));
+        //planetName[i].position.set(planets[i].x, 0, 0);
+
+        m1s.makeRotationY( planets[i].a1 );
+        m2s.setPosition(new THREE.Vector3(planets[i].x, 20, 0));
+
+        //запись результата перемножения m1 и m2 в m
+        m.multiplyMatrices( m1, m2 );
+        m.multiplyMatrices( m, m1 );
+
+        ms.multiplyMatrices( m1s, m2s );
+        ms.multiplyMatrices( ms, m1s );
+        //установка m в качестве матрицы преобразований объекта object
+        planets[i].planet.matrix = m;
+        planets[i].planet.matrixAutoUpdate = false;
+
+        planetName[i].matrix = ms;
+        planetName[i].matrixAutoUpdate = false;
     }
 
-    emitter(delta);
+    var mM = new THREE.Matrix4();
+    var mM1 = new THREE.Matrix4();
+    var mM2 = new THREE.Matrix4();
+    var mM3 = new THREE.Matrix4();
+    var mM4 = new THREE.Matrix4();
+    moon.a1 += moon.v1 * delta;
 
-    requestAnimationFrame( animate );
+    //создание матрицы поворота (вокруг оси Y) в m1 и матрицы перемещения в m2
+    mM1.makeRotationY( planets[2].a1 );
+    mM2.setPosition(new THREE.Vector3(planets[2].x, 0, 0)); 
+    mM3.makeRotationY( moon.a1 );
+    mM4.setPosition(new THREE.Vector3(moon.r, 0, 0));
+
+    //запись результата перемножения m1 и m2 в m
+    mM.multiplyMatrices( mM1, mM2 );  
+    mM.multiplyMatrices( mM, mM3 );
+    mM.multiplyMatrices( mM, mM4 );
+    //установка m в качестве матрицы преобразований объекта object
+    moon.planet.matrix = mM;
+    moon.planet.matrixAutoUpdate = false; 
+
+    var m = new THREE.Matrix4();
+    m.copyPosition(planets[2].planet.matrix);
+    //получение позиции из матрицы позиции
+    var pos = new THREE.Vector3(0, 0, 0);
+    pos.setFromMatrixPosition(m);
+
+    earthCloud.position.copy(pos);
+
+    if(keyboard.pressed("0"))
+    {
+        camera.position.set(0, 180, 0);
+
+        camera.lookAt(new THREE.Vector3( 0, 0.0, 0));
+
+        for (var i = 0; i < planetName.length; i++)
+        {
+            planetName[i].visible = true;
+            planetInfo[i].visible = false;
+        }
+
+        for (var i = 0; i < keys.length; i++)
+            keys[i] = false;
+    }
+
+    if(keyboard.pressed("1"))
+    {
+        keys[1] = true;    
+        for (var i = 0; i < planetName.length; i++)
+        {
+            planetName[i].visible = false;
+            planetInfo[i].visible = false;
+        }
+
+        planetInfo[0].visible = true;  
+    }
+
+    if(keyboard.pressed("2"))
+    {
+        keys[2] = true;
+        for (var i = 0; i < planetName.length; i++)
+        {
+            planetName[i].visible = false;
+            planetInfo[i].visible = false;
+        }
+
+        planetInfo[1].visible = true;
+    }
+
+    if(keyboard.pressed("3"))
+    {
+        keys[3] = true;
+        for (var i = 0; i < planetName.length; i++)
+        {
+            planetName[i].visible = false;
+            planetInfo[i].visible = false;
+        }
+
+        planetInfo[2].visible = true;
+    }
+
+    if(keyboard.pressed("4"))
+    {
+        keys[4] = true;
+        for (var i = 0; i < planetName.length; i++)
+        {
+            planetName[i].visible = false;
+            planetInfo[i].visible = false;
+        }
+
+        planetInfo[3].visible = true;
+    }
+
+    if(keyboard.pressed("left"))
+    {
+        al += 0.05;
+    }
+
+    if(keyboard.pressed("right"))
+    {
+        al -= 0.05;
+    } 
+
+    if(keys[1] == true)
+    {
+
+        m.copyPosition(planets[0].planet.matrix);
+
+        pos.setFromMatrixPosition(m);
+
+        var x = pos.x + planets[0].r * 4 * Math.cos(-planets[0].a1 + al);
+        var z = pos.z + planets[0].r * 4 * Math.sin(-planets[0].a1 + al);
+
+        camera.position.set(x, 0, z);
+        camera.lookAt(pos);
+    }
+    if(keys[2] == true)
+    {
+        var m = new THREE.Matrix4();
+        m.copyPosition(planets[1].planet.matrix);
+        //получение позиции из матрицы позиции
+        var pos = new THREE.Vector3(0, 0, 0);
+        pos.setFromMatrixPosition(m);
+
+        var x = pos.x + planets[1].r * 4 * Math.cos(-planets[1].a1 + al);
+        var z = pos.z + planets[1].r * 4 * Math.sin(-planets[1].a1 + al);
+
+        camera.position.set(x, 0, z);
+        camera.lookAt(pos);
+    }
+    if(keys[3] == true)
+    {
+        var m = new THREE.Matrix4();
+        m.copyPosition(planets[2].planet.matrix);
+        //получение позиции из матрицы позиции
+        var pos = new THREE.Vector3(0, 0, 0);
+        pos.setFromMatrixPosition(m);
+
+        var x = pos.x + planets[2].r * 4 * Math.cos(-planets[2].a1 + al);
+        var z = pos.z + planets[2].r * 4 * Math.sin(-planets[2].a1 + al);
+
+        camera.position.set(x, 0, z);
+        camera.lookAt(pos);
+    }
+    if(keys[4] == true)
+    {
+        var m = new THREE.Matrix4();
+        m.copyPosition(planets[3].planet.matrix);
+        //получение позиции из матрицы позиции
+        var pos = new THREE.Vector3(0, 0, 0);
+        pos.setFromMatrixPosition(m);
+
+        var x = pos.x + planets[3].r * 4 * Math.cos(-planets[3].a1 + al);
+        var z = pos.z + planets[3].r * 4 * Math.sin(-planets[3].a1 + al);
+
+        camera.position.set(x, 0, z);
+        camera.lookAt(pos);
+    }
+
+    requestAnimationFrame( animate ); 
     render();
+    
 }
 
-function loadModel(path, oname, mname, s, name)
+function line()
 {
-    var onProgress = function(xhr) {
-        if(xhr.lengthComputable) {
-            var percentComplete = xhr.loaded / xhr.total * 100;
-            console.log(Math.round(percentComplete, 2) + '% downloaded');
-        }
-    };
-
-    var onError = function(xhr) {};
-
-    var mtlLoader = new THREE.MTLLoader();
-    mtlLoader.setPath(path);
-    mtlLoader.load(mname, function(materials)
-    {
-        materials.preload(); 
-        var objLoader = new THREE.OBJLoader();
-        objLoader.setMaterials(materials);
-
-        objLoader.setPath(path);
-
-        objLoader.load(oname, function(object)
-        {
-            object.castShadow = true;
-            object.traverse(function(child)
-            {
-                if(child instanceof THREE.Mesh)
-                {
-                    child.castShadow = true;
-                    child.parent = object;
-                }
-            });
-
-            object.parent = object;
-                var x = Math.random() * n;
-                var z = Math.random() * n;
-                var y = geometry.vertices[Math.round(z) + Math.round(x) * n].y;
-
-                object.position.x = x;
-                object.position.y = y;
-                object.position.z = z;
-
-                object.scale.set(s, s, s);
-                //scene.add(object);
-                models.set(name, object);
-                //models.push(object);
-            
-        }, onProgress, onError);
-    });
-}
-
-function add3DCursor()
-{
-    var geometry = new THREE.CylinderGeometry(1.5, 0, 5, 64);
-    var cyMaterial = new THREE.MeshLambertMaterial({color: 0x888888});
-    cursor3D = new THREE.Mesh(geometry, cyMaterial);
-
-    cursor3D.visible = false;
-
-    scene.add(cursor3D);
-}
-
-function addCircle()
-{
-    var material = new THREE.LineBasicMaterial( { color: 0xffff00 } );
-    var segments = 64;
-    var circleGeometry = new THREE.CircleGeometry( 1, segments );
-    circleGeometry.vertices.shift();
-
-    for(var i = 0; i < circleGeometry.vertices.length; i++)
-    {
-        circleGeometry.vertices[i].z = circleGeometry.vertices[i].y;
-        circleGeometry.vertices[i].y = 0;
-    }
-
-    circle = new THREE.Line( circleGeometry, material );
-
-    circle.scale.set(radius, 1, radius);
-
-    circle.visible = false;
-
-    scene.add( circle ); 
-}
-
-function onDocumentMouseScroll( event ) 
-{
-    if(brVis == true)
-    {
-        if(radius > 1)
-            if(event.wheelDelta < 0)
-                radius--;
+    for(var j = 0; j < planets.length; j++) {
+        var lineGeometry = new THREE.Geometry(); 
+        var vertArray = lineGeometry.vertices; 
         
-        if(radius < 40)
-            if(event.wheelDelta > 0)
-                radius++;
-
-        circle.scale.set(radius, 1, radius);
+        for (var i = 0; i < 360; i++)
+        {
+            var x = planets[j].x*Math.cos(i * Math.PI/180.0);
+            var z = planets[j].x*Math.sin(i * Math.PI/180.0);
+            vertArray.push(new THREE.Vector3(x, 0, z)); 
+        }
+        var lineMaterial = new THREE.LineDashedMaterial( { color: 0xFFFFFF, dashSize: 1, gapSize: 1 } );        
+        var line = new THREE.Line( lineGeometry, lineMaterial );
+        line.computeLineDistances();
+        scene.add(line)
     }
 }
 
-function onDocumentMouseMove( event )
+function createEarthCloud()
 {
-    var mpos = {};
-
-    mpos.x = event.clientX - (window.innerWidth / 2);
-    mpos.y = (window.innerHeight / 2) - event.clientY;
-
-    if(sprt != null)
-        hitButton(mpos, sprt);
-
-    mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
-    mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
-    var vector = new THREE.Vector3( mouse.x, mouse.y, 1 );
-    vector.unproject(camera);
-    var ray = new THREE.Raycaster( camera.position, vector.sub( camera.position ).normalize() );
-    var intersects = ray.intersectObjects( targetList );
-
-    if(brVis == true)
+    // create destination canvas
+    var canvasResult = document.createElement('canvas');
+    canvasResult.width = 1024;
+    canvasResult.height = 512;
+    var contextResult = canvasResult.getContext('2d');
+    // load earthcloudmap
+    var imageMap = new Image();
+    imageMap.addEventListener("load", function()
     {
-        if ( intersects.length > 0 )
+        // create dataMap ImageData for earthcloudmap
+        var canvasMap = document.createElement('canvas');
+        canvasMap.width = imageMap.width;
+        canvasMap.height = imageMap.height;
+        var contextMap = canvasMap.getContext('2d');
+        contextMap.drawImage(imageMap, 0, 0);
+        var dataMap = contextMap.getImageData(0, 0, canvasMap.width, canvasMap.height);
+        // load earthcloudmaptrans
+        var imageTrans = new Image();
+        imageTrans.addEventListener("load", function()
         {
-            //console.log(intersects[0]);
-            if(cursor3D != null)
+            // create dataTrans ImageData for earthcloudmaptrans
+            var canvasTrans = document.createElement('canvas');
+            canvasTrans.width = imageTrans.width;
+            canvasTrans.height = imageTrans.height;
+            var contextTrans = canvasTrans.getContext('2d');
+            contextTrans.drawImage(imageTrans, 0, 0);
+            var dataTrans = contextTrans.getImageData(0, 0, canvasTrans.width,
+            canvasTrans.height);
+            // merge dataMap + dataTrans into dataResult
+            var dataResult = contextMap.createImageData(canvasMap.width, canvasMap.height);
+            for(var y = 0, offset = 0; y < imageMap.height; y++)
+            for(var x = 0; x < imageMap.width; x++, offset += 4)
             {
-                cursor3D.position.copy(intersects[0].point);
-                cursor3D.position.y += 2.5;
+                dataResult.data[offset+0] = dataMap.data[offset+0];
+                dataResult.data[offset+1] = dataMap.data[offset+1];
+                dataResult.data[offset+2] = dataMap.data[offset+2];
+                dataResult.data[offset+3] = 255-dataTrans.data[offset+0];
             }
-            if(circle != null)
-            {
-                circle.position.copy(intersects[0].point);
-                circle.position.y = 0;
+            // update texture with result
+            contextResult.putImageData(dataResult,0,0)
+            material.map.needsUpdate = true;
+        });
 
-                for (var i = 0; i < circle.geometry.vertices.length; i++)
-                {
-                    var pos = new THREE.Vector3();
-                    pos.copy(circle.geometry.vertices[i]);
-                    pos.applyMatrix4(circle.matrixWorld);
-            
-                    var x = Math.round(pos.x);
-                    var z = Math.round(pos.z);
+        imageTrans.src = "Planets/earth/earthcloudmaptrans.jpg";
+    }, false);
 
-                    if(x >= 0 && x < n && z >= 0 && z < n)
-                    {
-                        var y = geometry.vertices[z+x*n].y;
-                        circle.geometry.vertices[i].y = y + 0.03;
-                    } else
-                    {
-                        circle.geometry.vertices[i].y = 0;
-                    }
-                }
-            
-                circle.geometry.verticesNeedUpdate = true; 
-            }
-        }
-    }
-    else
-    {
-        if ( intersects.length > 0 )
-        {
-            if(selected != null){
-                selected.position.copy(intersects[0].point);
-                selected.userData.box.setFromObject(selected);
-                var pos = new THREE.Vector3();
-                selected.userData.box.getCenter(pos);
-                selected.userData.obb.position.copy(pos);
-                selected.userData.cube.position.copy(pos);
-
-                for(var i = 0; i < objectsList.length; i++)
-                {
-                    if(selected.userData.cube != objectsList[i])
-                    {
-                        objectsList[i].material.visible = false;
-                        if(intersect(selected.userData, objectsList[i].userData.model.userData) == true)
-                        {
-                            objectsList[i].material.visible = true;
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-function onDocumentMouseDown( event )
-{
-    if(brVis == true)
-    {
-        if (event.which == 1)
-            brushDirection = 1;
-
-        if (event.which == 3)
-            brushDirection = -1;
-    } else
-    { 
-        mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
-        mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
-        var vector = new THREE.Vector3( mouse.x, mouse.y, 1 );
-        vector.unproject(camera);
-        var ray = new THREE.Raycaster( camera.position, vector.sub( camera.position ).normalize() );
-        var intersects = ray.intersectObjects(objectsList, true);
-
-        if ( intersects.length > 0 )
-        {
-            selected = intersects[0].object.userData.model;
-            selected.userData.cube.material.visible = true;
-        }
-    }
-}
-
-function onDocumentMouseUp( event )
-{
-    if(brVis == true)
-        brushDirection = 0;
-    else
-    {
-        var mpos = {};
-
-        mpos.x = event.clientX - (window.innerWidth / 2);
-        mpos.y = (window.innerHeight / 2) - event.clientY;
-
-        if(sprt != null){
-            clickButton(mpos, sprt);}
-
-        selected.userData.cube.material.visible = false;
-        selected = null;
-    }
-}
-
-function sculpt(dir, delta)
-{
-    for (var i = 0; i < geometry.vertices.length; i++)
-    {
-        var x2 = geometry.vertices[i].x;
-        var z2 = geometry.vertices[i].z;
-        var r = radius;
-        var x1 = cursor3D.position.x;
-        var z1 = cursor3D.position.z;
-
-        var h = r*r-((x2-x1)*(x2-x1)+(z2-z1)*(z2-z1));
-
-        if (h > 0)
-        {
-            geometry.vertices[i].y += Math.sqrt(h) * delta * dir;
-        }
-    }
-
-    geometry.computeFaceNormals();
-    geometry.computeVertexNormals(); 
-    geometry.verticesNeedUpdate = true; 
-    geometry.normalsNeedUpdate = true;
-}
-
-function GUI()
-{
-    var params =
-    {
-        wind: 0,
-        brush: false,
-        rain: false,
-        addBush: function() { addMesh('bush') },
-        addHouse: function() { addMesh('house') }
-        //del: function() { delMesh() }
-    };
-
-    var meshWIND = gui.add( params, 'wind' ).min(-100).max(100).step(1).listen();
-    meshWIND.onChange(function(value) {
-        xwind = value;
-        wind.set(xwind, 0, 0);
+    imageMap.src = "Planets/earth/earthcloudmap.jpg";
+    var geometry = new THREE.SphereGeometry(4.1, 32, 32);
+    var material = new THREE.MeshPhongMaterial({
+    map: new THREE.Texture(canvasResult),
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.8,
     });
-    var cubeVisible = gui.add( params, 'brush' ).name('brush').listen();
-    cubeVisible.onChange(function(value)
-    {
-        brVis = value;
-        cursor3D.visible = value;
-        circle.visible = value;
-    });
-    var particlesVisible = gui.add( params, 'rain' ).name('rain').listen();
-    particlesVisible.onChange(function(value)
-    {
-        partVis = value;
-    });
-    gui.add( params, 'addHouse' ).name( "add house" );
-    gui.add( params, 'addBush' ).name( "add bush" );
-    //gui.add( params, 'del' ).name( "delete" );
 
-    gui.open();
+    var mesh = new THREE.Mesh(geometry, material);
+    return mesh;
 }
 
-function addMesh(name)
+function crSpriteName(name)
 {
-    var model = models.get(name).clone();
-    var box = new THREE.Box3();
+    var texture = loader.load(name);
+    var material = new THREE.SpriteMaterial( {map: texture} );
 
-    box.setFromObject(model);
-    model.userData.box = box;
-
-    var geometry = new THREE.BoxGeometry(1, 1, 1);
-    var material = new THREE.MeshBasicMaterial({color:0xffff00, wireframe: true});
-    var cube = new THREE.Mesh(geometry, material);
-    scene.add(cube);
-
-    cube.material.visible = false;
-
-    var pos = new THREE.Vector3();
-    box.getCenter(pos);
-    var size = new THREE.Vector3();
-    box.getSize(size);
-    cube.position.copy(pos);
-    cube.scale.set(size.x, size.y, size.z);
-
-    model.userData.cube = cube;
-    cube.userData.model = model;
-
-    var obb = {};
-    obb.basis = new THREE.Matrix4();
-    obb.halfSize = new THREE.Vector3();
-    obb.position = new THREE.Vector3();
-    box.getCenter(obb.position);
-    box.getSize(obb.halfSize).multiplyScalar(0.5);
-    obb.basis.extractRotation(model.matrixWorld);
-
-    model.userData.obb = obb;
-
-    objectsList.push(cube);
-    scene.add(model);
+    var sprite = new THREE.Sprite( material );
+    sprite.position.set( 20, 0, 0);
+    sprite.scale.set(2, 1.3, 1);
+    scene.add( sprite );
+    planetName.push( sprite );
 }
 
-function intersect(ob1, ob2)
+function crSpriteInfo(name)
 {
-    var xAxisA = new THREE.Vector3();
-    var yAxisA = new THREE.Vector3();
-    var zAxisA = new THREE.Vector3();
-    var xAxisB = new THREE.Vector3();
-    var yAxisB = new THREE.Vector3();
-    var zAxisB = new THREE.Vector3();
-    var translation = new THREE.Vector3();
-    var vector = new THREE.Vector3();
+    var texture = loader.load(name);
+    var material = new THREE.SpriteMaterial( {map: texture} );
 
-    var axisA = [];
-    var axisB = [];
-    var rotationMatrix = [ [], [], [] ];
-    var rotationMatrixAbs = [ [], [], [] ];
-    var _EPSILON = 1e-3;
+    var sprite = new THREE.Sprite( material );
+    sprite.center.set( 0.0, 1.0 );
+    sprite.scale.set( 250, 250, 1 );
 
-    var halfSizeA, halfSizeB;
-    var t, i;
-
-    ob1.obb.basis.extractBasis( xAxisA, yAxisA, zAxisA );
-    ob2.obb.basis.extractBasis( xAxisB, yAxisB, zAxisB );
-
-    axisA.push( xAxisA, yAxisA, zAxisA );
-    axisB.push( xAxisB, yAxisB, zAxisB );
-    vector.subVectors( ob2.obb.position, ob1.obb.position );
-    for ( i = 0; i < 3; i++ )
-    {
-        translation.setComponent( i, vector.dot( axisA[ i ] ) );
-    }
-    for ( i = 0; i < 3; i++ )
-    {
-        for ( var j = 0; j < 3; j++ )
-        {
-            rotationMatrix[ i ][ j ] = axisA[ i ].dot( axisB[ j ] );
-            rotationMatrixAbs[ i ][ j ] = Math.abs( rotationMatrix[ i ][ j ] ) + _EPSILON;
-        }
-    }
-    for ( i = 0; i < 3; i++ )
-    {
-        vector.set( rotationMatrixAbs[ i ][ 0 ], rotationMatrixAbs[ i ][ 1 ], rotationMatrixAbs[ i ][ 2 ]
-        );
-        halfSizeA = ob1.obb.halfSize.getComponent( i );
-        halfSizeB = ob2.obb.halfSize.dot( vector );
-        
-        if ( Math.abs( translation.getComponent( i ) ) > halfSizeA + halfSizeB )
-        {
-            return false;
-        }
-    }
-    for ( i = 0; i < 3; i++ )
-    {
-        vector.set( rotationMatrixAbs[ 0 ][ i ], rotationMatrixAbs[ 1 ][ i ], rotationMatrixAbs[ 2 ][ i ] );
-        halfSizeA = ob1.obb.halfSize.dot( vector );
-        halfSizeB = ob2.obb.halfSize.getComponent( i );
-        vector.set( rotationMatrix[ 0 ][ i ], rotationMatrix[ 1 ][ i ], rotationMatrix[ 2 ][ i ] );
-        t = translation.dot( vector );
-        if ( Math.abs( t ) > halfSizeA + halfSizeB )
-        {
-            return false;
-        }
-    }
-    halfSizeA = ob1.obb.halfSize.y * rotationMatrixAbs[ 2 ][ 0 ] + ob1.obb.halfSize.z *
-    rotationMatrixAbs[ 1 ][ 0 ];
-    halfSizeB = ob2.obb.halfSize.y * rotationMatrixAbs[ 0 ][ 2 ] + ob2.obb.halfSize.z *
-    rotationMatrixAbs[ 0 ][ 1 ];
-    t = translation.z * rotationMatrix[ 1 ][ 0 ] - translation.y * rotationMatrix[ 2 ][ 0 ];
-    if ( Math.abs( t ) > halfSizeA + halfSizeB )
-    {
-        return false;
-    }
-    halfSizeA = ob1.obb.halfSize.y * rotationMatrixAbs[ 2 ][ 1 ] + ob1.obb.halfSize.z *
-    rotationMatrixAbs[ 1 ][ 1 ];
-    halfSizeB = ob2.obb.halfSize.x * rotationMatrixAbs[ 0 ][ 2 ] + ob2.obb.halfSize.z *
-    rotationMatrixAbs[ 0 ][ 0 ];
-    t = translation.z * rotationMatrix[ 1 ][ 1 ] - translation.y * rotationMatrix[ 2 ][ 1 ];
-    if ( Math.abs( t ) > halfSizeA + halfSizeB )
-    {
-        return false;
-    }
-    halfSizeA = ob1.obb.halfSize.y * rotationMatrixAbs[ 2 ][ 2 ] + ob1.obb.halfSize.z *
-    rotationMatrixAbs[ 1 ][ 2 ];
-    halfSizeB = ob2.obb.halfSize.x * rotationMatrixAbs[ 0 ][ 1 ] + ob2.obb.halfSize.y *
-    rotationMatrixAbs[ 0 ][ 0 ];
-    t = translation.z * rotationMatrix[ 1 ][ 2 ] - translation.y * rotationMatrix[ 2 ][ 2 ];
-    if ( Math.abs( t ) > halfSizeA + halfSizeB )
-    {
-        return false;
-    }
-    halfSizeA = ob1.obb.halfSize.x * rotationMatrixAbs[ 2 ][ 0 ] + ob1.obb.halfSize.z *
-    rotationMatrixAbs[ 0 ][ 0 ];
-    halfSizeB = ob2.obb.halfSize.y * rotationMatrixAbs[ 1 ][ 2 ] + ob2.obb.halfSize.z *
-    rotationMatrixAbs[ 1 ][ 1 ];
-    t = translation.x * rotationMatrix[ 2 ][ 0 ] - translation.z * rotationMatrix[ 0 ][ 0 ];
-    if ( Math.abs( t ) > halfSizeA + halfSizeB )
-    {
-        return false;
-    }
-    halfSizeA = ob1.obb.halfSize.x * rotationMatrixAbs[ 2 ][ 1 ] + ob1.obb.halfSize.z *
-    rotationMatrixAbs[ 0 ][ 1 ];
-    halfSizeB = ob2.obb.halfSize.x * rotationMatrixAbs[ 1 ][ 2 ] + ob2.obb.halfSize.z *
-    rotationMatrixAbs[ 1 ][ 0 ];
-    t = translation.x * rotationMatrix[ 2 ][ 1 ] - translation.z * rotationMatrix[ 0 ][ 1 ];
-    if ( Math.abs( t ) > halfSizeA + halfSizeB )
-    {
-        return false;
-    }
-    halfSizeA = ob1.obb.halfSize.x * rotationMatrixAbs[ 2 ][ 2 ] + ob1.obb.halfSize.z *
-    rotationMatrixAbs[ 0 ][ 2 ];
-    halfSizeB = ob2.obb.halfSize.x * rotationMatrixAbs[ 1 ][ 1 ] + ob2.obb.halfSize.y *
-    rotationMatrixAbs[ 1 ][ 0 ];
-    t = translation.x * rotationMatrix[ 2 ][ 2 ] - translation.z * rotationMatrix[ 0 ][ 2 ];
-    if ( Math.abs( t ) > halfSizeA + halfSizeB )
-    {
-        return false;
-    }
-    halfSizeA = ob1.obb.halfSize.x * rotationMatrixAbs[ 1 ][ 0 ] + ob1.obb.halfSize.y *
-    rotationMatrixAbs[ 0 ][ 0 ];
-    halfSizeB = ob2.obb.halfSize.y * rotationMatrixAbs[ 2 ][ 2 ] + ob2.obb.halfSize.z *
-    rotationMatrixAbs[ 2 ][ 1 ];
-    t = translation.y * rotationMatrix[ 0 ][ 0 ] - translation.x * rotationMatrix[ 1 ][ 0 ];
-    if ( Math.abs( t ) > halfSizeA + halfSizeB )
-    {
-        return false;
-    }
-    halfSizeA = ob1.obb.halfSize.x * rotationMatrixAbs[ 1 ][ 1 ] + ob1.obb.halfSize.y *
-    rotationMatrixAbs[ 0 ][ 1 ];
-    halfSizeB = ob2.obb.halfSize.x * rotationMatrixAbs[ 2 ][ 2 ] + ob2.obb.halfSize.z *
-    rotationMatrixAbs[ 2 ][ 0 ];
-    t = translation.y * rotationMatrix[ 0 ][ 1 ] - translation.x * rotationMatrix[ 1 ][ 1 ];
-    if ( Math.abs( t ) > halfSizeA + halfSizeB )
-    {
-        return false;
-    }
-    halfSizeA = ob1.obb.halfSize.x * rotationMatrixAbs[ 1 ][ 2 ] + ob1.obb.halfSize.y *
-    rotationMatrixAbs[ 0 ][ 2 ];
-    halfSizeB = ob2.obb.halfSize.x * rotationMatrixAbs[ 2 ][ 1 ] + ob2.obb.halfSize.y *
-    rotationMatrixAbs[ 2 ][ 0 ];
-    t = translation.y * rotationMatrix[ 0 ][ 2 ] - translation.x * rotationMatrix[ 1 ][ 2 ];
-    if ( Math.abs( t ) > halfSizeA + halfSizeB )
-    {
-        return false;
-    }
-    return true;
-}
-
-function addButton(name1, name2)
-{
-    var texture1 = loader.load(name1);
-    var material1 = new THREE.SpriteMaterial( { map: texture1 } );
-
-    var texture2 = loader.load(name2);
-    var material2 = new THREE.SpriteMaterial( { map: texture2 } );
-
-        sprite = new THREE.Sprite( material1 );
-        sprite.center.set( 0.0, 1.0 );
-        sprite.scale.set( 80, 64, 1 );
-
-        sceneOrtho.add(sprite);
-        updateHUDSprites(sprite);
-
-        var SSprite = {};
-        SSprite.sprite = sprite;
-        SSprite.mat1 = material1;
-        SSprite.mat2 = material2;
-        SSprite.click = sprtClick;
-
-        return SSprite;
-}
-
-function updateHUDSprites(sprite) {
-
+    sceneOrtho.add(sprite);
     var width = window.innerWidth / 2;
     var height = window.innerHeight / 2;
 
-    sprite.position.set( -width, height, 1 ); // center
+    sprite.position.set( -width, height, 1 );
+    sprite.visible = false;
 
-}
-function addButtons()
-{
-    sprt = addButton('models/l68717-cyprys-house-23761.jpg', 'models/l68717-cyprys-house-23761.jpg');
+    planetInfo.push( sprite );
 }
 
-function hitButton(mPos, sprite)
-{
-    var pw = sprite.sprite.position.x;
-    var ph = sprite.sprite.position.y;
-    var sw = pw + sprite.sprite.scale.x;
-    var sh = ph - sprite.sprite.scale.y;
-
-    if(mPos.x > pw && mPos.x < sw)
-    {
-        if(mPos.y < ph && mPos.y > sh)
-        {
-            sprite.sprite.material = sprite.mat2;
-        }
-        else
-            sprite.sprite.material = sprite.mat1;
-    }
-    else sprite.sprite.material = sprite.mat1;
-}
-
-function clickButton(mPos, sprite)
-{
-    var pw = sprite.sprite.position.x;
-    var ph = sprite.sprite.position.y;
-    var sw = pw + sprite.sprite.scale.x;
-    var sh = ph - sprite.sprite.scale.y;
-
-    if(mPos.x > pw && mPos.x < sw)
-    {
-        if(mPos.y < ph && mPos.y > sh)
-        {
-            sprite.click();
-        }
-    }
-}
-
-function sprtClick()
-{
-    addMesh('house');
-}
-
-function createSpriteMaterial(name)
-{
-    var texture = loader.load(name);
-    var material = new THREE.SpriteMaterial( { map: texture } );
-
-    return material;
-}
-
-function addSprite(mat, pos, lifetime)
-{
-    
-
-    sprite = new THREE.Sprite( mat );
-    sprite.center.set( 0.5, 0.5 );
-    sprite.scale.set( 1.5, 1.5, 1 );
-
-    sprite.position.copy(pos);
-
-    scene.add(sprite);
-
-    var SSprite = {};
-    SSprite.sprite = sprite;
-    SSprite.v = new THREE.Vector3(0, 0, 0);
-    SSprite.m = (Math.random() * 0.1) + 0.01;
-    SSprite.lifetime = lifetime;
-
-    return SSprite;
-}
-
-function emitter(delta)
-{
-    var current_particles = Math.ceil(PARTICLES_PER_SECOND * delta);
-
-    for(var i = 0; i < current_particles; i++)
-    {
-        if(particles.length < MAX_PARTICLES)
-        {
-            var x = Math.random()*n;
-            var z = Math.random()*n;
-
-            var lifetime = (Math.random()*2) + 3;
-
-            var pos = new THREE.Vector4(x, 150, z);
-            var particle = addSprite(rainMat, pos, lifetime);
-            particles.push(particle);
-        }
-    }
-
-    for(var i = 0; i < particles.length; i++)
-    {
-        particles[i].lifetime -= delta;
-        if(particles[i].lifetime <= 0)
-        {
-            scene.remove(particles[i].sprite);
-            particles.splice(i, 1);
-            continue;
-        }
-        var gs = new THREE.Vector3();
-        gs.copy(g);
-
-        gs.multiplyScalar(particles[i].m);
-        gs.multiplyScalar(delta);
-
-        particles[i].v.add(gs);
-        particles[i].sprite.position.add(particles[i].v);
-    }
-
-    for (var i = 0; i < particles.length; i++)
-    {
-        if (partVis == true)
-            particles[i].sprite.visible = true;
-        else
-            particles[i].sprite.visible = false;
-
-        var v = new THREE.Vector3(0, 0, 0);
-        var w = new THREE.Vector3(0, 0, 0);
-        
-        w.copy(wind);
-        w.multiplyScalar(delta);
-        
-        v.copy(particles[i].v);
-        v.add(w);
-        
-        particles[i].sprite.position.add(v);
-    }
-}
+init();
+animate();
